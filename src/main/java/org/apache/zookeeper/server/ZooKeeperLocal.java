@@ -1,7 +1,5 @@
-package utils.embeddedkafka;
+package org.apache.zookeeper.server;
 
-import org.apache.zookeeper.server.ServerConfig;
-import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.quorum.QuorumPeerConfig;
 
 import java.io.FileNotFoundException;
@@ -10,6 +8,7 @@ import java.util.Properties;
 
 /**
  * Local embedded Kafka. Taken from https://gist.github.com/fjavieralba/7930018
+ * This has to be in org.apache.zookeeper.server package in order to access protected .shutdown() method.
  */
 public class ZooKeeperLocal {
 
@@ -38,5 +37,9 @@ public class ZooKeeperLocal {
                 }
             }
         }.start();
+    }
+
+    public void shutdown() {
+        zooKeeperServer.shutdown();
     }
 }

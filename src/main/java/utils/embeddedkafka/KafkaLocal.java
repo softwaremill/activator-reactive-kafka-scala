@@ -2,6 +2,7 @@ package utils.embeddedkafka;
 
 import kafka.server.KafkaConfig;
 import kafka.server.KafkaServerStartable;
+import org.apache.zookeeper.server.ZooKeeperLocal;
 
 import java.io.IOException;
 import java.util.Properties;
@@ -21,7 +22,6 @@ public class KafkaLocal {
         System.out.println("starting local zookeeper...");
         zookeeper = new ZooKeeperLocal(zkProperties);
         System.out.println("done");
-
         //start local kafka broker
         kafka = new KafkaServerStartable(kafkaConfig);
         System.out.println("starting local kafka broker...");
@@ -34,7 +34,7 @@ public class KafkaLocal {
         //stop kafka broker
         System.out.println("stopping kafka...");
         kafka.shutdown();
-
+        zookeeper.shutdown();
         System.out.println("done");
     }
 

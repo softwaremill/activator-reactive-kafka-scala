@@ -4,6 +4,7 @@ import java.util.{ Properties, UUID }
 
 import akka.actor._
 import akka.stream.ActorMaterializer
+import com.softwaremill.embeddedkafka.EmbeddedKafka
 import utils.embeddedkafka.KafkaLocal
 
 import scala.language.postfixOps
@@ -15,7 +16,13 @@ class Coordinator extends Actor with ActorLogging {
   var writer: Option[ActorRef] = None
   var reader: Option[ActorRef] = None
   val materializer = ActorMaterializer()(context)
+
   implicit val ec = context.dispatcher
+
+  override def preStart(): Unit = {
+    super.preStart()
+    context.actorOf(Props(new EmbeddedKafka))
+  }
 
   override def receive: Receive = {
     case "Start" =>
@@ -33,13 +40,4 @@ class Coordinator extends Actor with ActorLogging {
       log.debug("Shutting down the app")
       context.system.shutdown()
   }
-
-  def initEmbeddedKafka() = {
-    val kafkaProperties = new Properties()
-    val zkProperties = new Properties()
-    kafkaProperties.load(getClass.getResourceAsStream("/kafkalocal.properties"))
-    zkProperties.load(getClass.getResourceAsStream("/zklocal.properties"))
-    new KafkaLocal(kafkaProperties, zkProperties)
-  }
-
 }

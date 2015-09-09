@@ -1,10 +1,14 @@
 package sample.reactivekafka
 
-import akka.actor.{ActorSystem, Props}
+import java.io.IOException
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file._
+
+import akka.actor.{ ActorSystem, Props }
+import com.softwaremill.embeddedkafka.EmbeddedKafka
 
 object Application extends App {
 
   implicit val system = ActorSystem("CurrencyWatcher")
-  val coordinator = system.actorOf(Props(new Coordinator()))
-  coordinator ! "Start"
+  system.actorOf(Props(new Coordinator()))
 }
