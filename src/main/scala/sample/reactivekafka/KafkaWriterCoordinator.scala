@@ -27,12 +27,10 @@ class KafkaWriterCoordinator(mat: Materializer, topicName: String) extends Actor
 
   override def preStart(): Unit = {
     super.preStart()
-    self ! "Init"
+    initWriter()
   }
 
   override def receive: Receive = {
-    case "Init" =>
-      initWriter()
     case "Stop" =>
       log.debug("Stopping the writer coordinator")
       subscriberActor.foreach(actor => actor ! OnComplete)
