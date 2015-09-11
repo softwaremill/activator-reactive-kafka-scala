@@ -88,7 +88,7 @@
 <pre><code>
 Source(consumerWithOffsetSink.publisher)
     .map(processMessage)
-    .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
+    .withAttributes(supervisionStrategy(processingDecider))
     .to(consumerWithOffsetSink.offsetCommitSink).run()
 </code></pre>
     </p>
@@ -185,8 +185,8 @@ ConsumerProperties(
     <p>
         Please note that the subscriber/publisher wrappers are in fact <b>blocking</b> due to the synchronous nature
         of underlying Kafka client. In order to isolate any potential problems, on the production environment you
-        should consider using custom dispatchers for these actors. More on this in the [Ractive Kafka
-        README](https://github.com/softwaremill/reactive-kafka#tuning).
+        should consider using custom dispatchers for these actors. More on this in the
+        <a href="https://github.com/softwaremill/reactive-kafka#tuning" target="_blank">Reactive Kafka README</a>.
     </p>
 </div>
 <div>
