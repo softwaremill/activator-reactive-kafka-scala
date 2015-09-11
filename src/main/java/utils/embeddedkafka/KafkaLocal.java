@@ -22,6 +22,7 @@ public class KafkaLocal {
         System.out.println("starting local zookeeper...");
         zookeeper = new ZooKeeperLocal(zkProperties);
         System.out.println("done");
+        Thread.sleep(1500);
         //start local kafka broker
         kafka = new KafkaServerStartable(kafkaConfig);
         System.out.println("starting local kafka broker...");
