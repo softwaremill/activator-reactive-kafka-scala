@@ -56,11 +56,7 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
     msg
   }
 
-  def alertTriggered(update: BigDecimal): Boolean = update > 3
-
-  def percentChange(lastRate: BigDecimal, rate: BigDecimal) = {
-    ((rate - lastRate) * 100.0 / rate).setScale(3, RoundingMode.UP)
-  }
+  def alertTriggered(update: BigDecimal): Boolean = update.abs > 3
 
   override def postStop(): Unit = {
     consumerWithOffsetSink.cancel()

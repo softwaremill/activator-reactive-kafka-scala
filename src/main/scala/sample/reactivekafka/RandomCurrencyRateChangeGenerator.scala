@@ -13,7 +13,7 @@ object RandomCurrencyRateChangeGenerator {
   def randomPair() = {
     val baseCurrency = randomCurrency()
     val counterCurrency = generateCounterCurrency(baseCurrency)
-    val percentUpdate = BigDecimal.valueOf(Random.nextDouble() * 5.0).setScale(3, RoundingMode.DOWN)
+    val percentUpdate = BigDecimal.valueOf((Random.nextDouble() * 10.0) - 5.0).setScale(3, RoundingMode.DOWN)
     CurrencyRateUpdated(baseCurrency, counterCurrency, percentUpdate)
   }
 
