@@ -1,0 +1,203 @@
+<html>
+<head>
+    <title>Demonstrating Reactive Kafka</title>
+</head>
+<body>
+
+<div>
+    <h2>Introduction</h2>
+
+    <p>
+        This tutorial contains a sample app that demonstrates Reactive Kafka.
+    </p>
+
+    <p>
+        Reactive Kafka is a wrapper that allows interacting with Apache Kafka like with
+        a <a href="http://www.reactive-streams.org/" target="_blank">Reactive Stream</a>,
+        which is a standard for asynchronous stream processing with non-blocking backpressure.
+    </p>
+
+    <p>
+        Reactive Kafka allows reading from Kafka like from a reactive Source, or writing to its
+        representation as a Sink. The library offers a simple DSL for constructing reactive Publishers/Subscribers
+        with various configuration options for the underlying Kafka queue. It also supports
+        manual commit to achieve at-least-once delivery.
+
+    <p>
+</div>
+<div>
+    <h2>The application</h2>
+
+    <p>
+        What is our example application's logic?
+    </p>
+
+    <p>
+        Our flow begins with a random generator which generates currency exchange rate updates and writes them to
+        a Kafka queue using a reactive <code>Publisher</code>. Elsewhere, a <code>Subscriber</code> reads
+        from the queue in a reactive manner, producing a stream of messages that get processed and then committed after
+        successful processing. The processing part checks whether exchange rate change passed some threshold (3%) and
+        in such case, emits an alert message.
+
+    <p>A coordinator actor runs both processes as children and closes them after some time, shutting down whole
+        system.</p>
+
+    <p>Let's now take a look at all the individual components and how they work together.</p>
+</div>
+<div>
+    <h2>The coordinator</h2>
+
+    <p>The <code>Coordinator</code> actor serves for orchestration of our application logic. It starts our writer
+        and
+        reader actors and schedules their shutdown together with graceful closing of embedded Kafka instance and the
+        actor system.
+    </p>
+
+    <h2>The writer</h2>
+
+    <p>
+        The stream that continuously puts elements in our queue is managed by the
+        <code>KafkaWriterCoordinator</code>
+        actor. On start, it initializes a stream where the <b>Source</b> is a Publisher with our random event
+        generator,
+        and the <b>Sink</b> is build with the Reactive Kafka API in order to connect a queue.
+    </p>
+
+    <p>
+        One important detail here is the error handling block. Since we want to capture all exceptions thrown by
+        our Kafka publisher, we initialize the subscriber actor as the child of <code>KafkaWriterCoordinator</code>.
+        That's why the publisher actor is created with <code>val actor = context.actorOf(actorProps)</code>. This
+        allows
+        us to define a custom <code>supervisorStrategy</code> which handles write failures.
+    </p>
+
+    <h2>The reader</h2>
+
+    <p>
+        Another actor, the <code>KafkaReaderCoordinator</code> starts a second stream. This one encapsulates the
+        logic
+        of reading from the Kafka queue, processing messages and committing their offsets after they get processed.
+    </p>
+
+    <p>
+        On actor initialization, we call <code>new ReactiveKafka().consumeWithOffsetSink(...)</code> in order
+        to create an object of type <code>PublisherWithOffsetSink</code>. This type represents a pair: The
+        <code>Publisher</code> that can be used as a <code>Source</code> (the queue that we read from) and an
+        offset sink, which we can put messages back to after we process them. We additionally add a guard
+        supervision strategy to handle any errors that may happen during message processing. The whole flow becomes:
+        <pre><code>
+            Source(consumerWithOffsetSink.publisher)
+            .map(processMessage)
+            .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
+            .to(consumerWithOffsetSink.offsetCommitSink).run()
+        </code></pre>
+    </p>
+
+    <p>
+        The <code>offsetCommitSink</code> does not perform immediate commit, but it buffers offset and performs a
+        periodic
+        flush. By default Zookeeper is used to keep committed offsets data, but we want to use new Kafka 0.8 feature
+        which allows us to store the offsets directly in Kafka. That's why we initialize our
+        <code>ConsumerProperties</code>
+        as follows:
+        <pre><code>
+            ConsumerProperties(
+            brokerList = "localhost:9092",
+            zooKeeperHost = "localhost:2181",
+            topic = topicName,
+            "group",
+            CurrencyRateUpdatedDecoder
+            )
+            .kafkaOffsetsStorage()
+            .commitInterval(1200 milliseconds)
+        </code></pre>
+        The <code>commitInterval()</code> function allows us to fine-tune the interval of commit flushes in the
+        underlying commit sink.
+    </p>
+
+    <p>
+        The message processing logic is actually quite trivial - for the purpose of simplicity in the example it
+        only
+        checks whether exchange currency rate update crossed a threshold of 3% and in such case - prints an alert to
+        logs (console output).
+    </p>
+</div>
+<div>
+    <h2>Shutdown</h2>
+
+    <p>
+        It is important that we close the consumers and publishers before actor system goes down. The
+        <code>KafkaWriterCoordinator</code> ensures that its subscriber child receives an <code>OnComplete</code>
+        message
+        that should trigger closing of any underlying resources. The <code>KafkaReaderCoordinator</code> calls
+        <code>consumerWithOffsetSink.cancel()</code> which also does necessary cleaning.
+    </p>
+</div>
+<div>
+    <h2>Running the application</h2>
+
+    <p>
+        To start the app, you just need to execute <code>run</code> in the sbt console. The console output should look
+        similar to following:
+        <pre><code>
+            [info] Running sample.reactivekafka.Application
+            [info] 11:03:01.680 INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+            [info] starting local zookeeper...
+            [info] done
+            [info] starting local kafka broker...
+            [info] done
+            [info] 11:03:03.621 DEBUG sample.reactivekafka.Coordinator - Starting the coordinator
+            [info] 11:03:05.858 DEBUG s.r.KafkaReaderCoordinator - Starting the reader
+            [info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.560%!
+            [info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 4.211%!
+            [info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/AUD changed by 3.458%!
+            [info] 11:03:06.160 INFO s.r.KafkaReaderCoordinator - Exchange rate for JPY/CHF changed by 3.188%!
+            [info] 11:03:06.461 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 3.879%!
+            [info] 11:03:07.062 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/CHF changed by 4.792%!
+            [info] 11:03:07.671 INFO s.r.KafkaReaderCoordinator - Exchange rate for AUD/EUR changed by 4.967%!
+            [info] 11:03:07.973 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.317%!
+            [info] 11:03:08.578 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/EUR changed by 3.202%!
+            [info] 11:03:09.185 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/EUR changed by 4.125%!
+            [info] 11:03:10.886 DEBUG sample.reactivekafka.Coordinator - Stopping the coordinator
+            [info] 11:03:10.887 DEBUG s.r.KafkaWriterCoordinator - Stopping the writer coordinator
+            [info] 11:03:15.905 DEBUG sample.reactivekafka.Coordinator - Shutting down the app
+            [info] stopping kafka...
+            [info] done
+        </code></pre>
+        Here we can see all the alerts that got triggered in our reader as well as diagnostic messages about
+        starting/stopping
+        individual components.
+    </p>
+
+    <p>
+        You may notice that the <code>logback.xml</code> configuration file contains directives that silence some errors
+        and warnings.
+        These messages are related to running Kafka/Zookeeper in embedded mode and do not really affect our application,
+        so we don't want them to pollute our output in this example. You can always try to run the app on your local
+        ZK/Kafka
+        instance and disable initialization of <code>EmbeddedKafka</code> in the <code>Coordinator</code> actor.
+    </p>
+</div>
+
+<div>
+    <h2>Performance tuning</h2>
+
+    <p>
+        Please note that the subscriber/publisher wrappers are in fact <b>blocking</b> due to the synchronous nature
+        of underlying Kafka client. In order to isolate any potential problems, on the production environment you
+        should consider using custom dispatchers for these actors. More on this in the [Ractive Kafka
+        README](https://github.com/softwaremill/reactive-kafka#tuning).
+    </p>
+</div>
+<div>
+    <h2>Links</h2>
+    <ul>
+        <li><a href="https://github.com/softwaremill/reactive-kafka#reactive-streams-for-kafka"
+               target="_blank">Reactive Kafka documentation</a></li>
+        <li><a href="http://doc.akka.io/api/akka-stream-and-http-experimental/1.0/#akka.stream.scaladsl.package"
+               target="_blank">Akka Streams 1.0 API documentation</a></li>
+        <li><a href="http://www.reactive-streams.org/" target="_blank">Reactive Streams</a></li>
+    </ul>
+</div>
+</body>
+</html>
