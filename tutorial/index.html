@@ -85,12 +85,12 @@
         <code>Publisher</code> that can be used as a <code>Source</code> (the queue that we read from) and an
         offset sink, which we can put messages back to after we process them. We additionally add a guard
         supervision strategy to handle any errors that may happen during message processing. The whole flow becomes:
-        <pre><code>
-            Source(consumerWithOffsetSink.publisher)
-            .map(processMessage)
-            .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
-            .to(consumerWithOffsetSink.offsetCommitSink).run()
-        </code></pre>
+<pre><code>
+Source(consumerWithOffsetSink.publisher)
+    .map(processMessage)
+    .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
+    .to(consumerWithOffsetSink.offsetCommitSink).run()
+</code></pre>
     </p>
 
     <p>
@@ -100,17 +100,17 @@
         which allows us to store the offsets directly in Kafka. That's why we initialize our
         <code>ConsumerProperties</code>
         as follows:
-        <pre><code>
-            ConsumerProperties(
-            brokerList = "localhost:9092",
-            zooKeeperHost = "localhost:2181",
-            topic = topicName,
-            "group",
-            CurrencyRateUpdatedDecoder
-            )
-            .kafkaOffsetsStorage()
-            .commitInterval(1200 milliseconds)
-        </code></pre>
+<pre><code>
+ConsumerProperties(
+    brokerList = "localhost:9092",
+    zooKeeperHost = "localhost:2181",
+    topic = topicName,
+    "group",
+    CurrencyRateUpdatedDecoder
+    )
+    .kafkaOffsetsStorage()
+    .commitInterval(1200 milliseconds)
+</code></pre>
         The <code>commitInterval()</code> function allows us to fine-tune the interval of commit flushes in the
         underlying commit sink.
     </p>
@@ -139,30 +139,30 @@
     <p>
         To start the app, you just need to execute <code>run</code> in the sbt console. The console output should look
         similar to following:
-        <pre><code>
-            [info] Running sample.reactivekafka.Application
-            [info] 11:03:01.680 INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
-            [info] starting local zookeeper...
-            [info] done
-            [info] starting local kafka broker...
-            [info] done
-            [info] 11:03:03.621 DEBUG sample.reactivekafka.Coordinator - Starting the coordinator
-            [info] 11:03:05.858 DEBUG s.r.KafkaReaderCoordinator - Starting the reader
-            [info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.560%!
-            [info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 4.211%!
-            [info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/AUD changed by 3.458%!
-            [info] 11:03:06.160 INFO s.r.KafkaReaderCoordinator - Exchange rate for JPY/CHF changed by 3.188%!
-            [info] 11:03:06.461 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 3.879%!
-            [info] 11:03:07.062 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/CHF changed by 4.792%!
-            [info] 11:03:07.671 INFO s.r.KafkaReaderCoordinator - Exchange rate for AUD/EUR changed by 4.967%!
-            [info] 11:03:07.973 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.317%!
-            [info] 11:03:08.578 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/EUR changed by 3.202%!
-            [info] 11:03:09.185 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/EUR changed by 4.125%!
-            [info] 11:03:10.886 DEBUG sample.reactivekafka.Coordinator - Stopping the coordinator
-            [info] 11:03:10.887 DEBUG s.r.KafkaWriterCoordinator - Stopping the writer coordinator
-            [info] 11:03:15.905 DEBUG sample.reactivekafka.Coordinator - Shutting down the app
-            [info] stopping kafka...
-            [info] done
+<pre><code>
+[info] Running sample.reactivekafka.Application
+[info] 11:03:01.680 INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+[info] starting local zookeeper...
+[info] done
+[info] starting local kafka broker...
+[info] done
+[info] 11:03:03.621 DEBUG sample.reactivekafka.Coordinator - Starting the coordinator
+[info] 11:03:05.858 DEBUG s.r.KafkaReaderCoordinator - Starting the reader
+[info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.560%!
+[info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 4.211%!
+[info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/AUD changed by 3.458%!
+[info] 11:03:06.160 INFO s.r.KafkaReaderCoordinator - Exchange rate for JPY/CHF changed by 3.188%!
+[info] 11:03:06.461 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 3.879%!
+[info] 11:03:07.062 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/CHF changed by 4.792%!
+[info] 11:03:07.671 INFO s.r.KafkaReaderCoordinator - Exchange rate for AUD/EUR changed by 4.967%!
+[info] 11:03:07.973 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.317%!
+[info] 11:03:08.578 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/EUR changed by 3.202%!
+[info] 11:03:09.185 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/EUR changed by 4.125%!
+[info] 11:03:10.886 DEBUG sample.reactivekafka.Coordinator - Stopping the coordinator
+[info] 11:03:10.887 DEBUG s.r.KafkaWriterCoordinator - Stopping the writer coordinator
+[info] 11:03:15.905 DEBUG sample.reactivekafka.Coordinator - Shutting down the app
+[info] stopping kafka...
+[info] done
         </code></pre>
         Here we can see all the alerts that got triggered in our reader as well as diagnostic messages about
         starting/stopping
