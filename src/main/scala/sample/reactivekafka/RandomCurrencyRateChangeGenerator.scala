@@ -3,8 +3,9 @@ package sample.reactivekafka
 import java.security.SecureRandom
 
 import scala.annotation.tailrec
+import scala.math.BigDecimal.RoundingMode
 
-object RandomCurrencyRateGenerator {
+object RandomCurrencyRateChangeGenerator {
 
   val currencies = List("EUR", "USD", "CHF", "JPY", "AUD")
   val Random = new SecureRandom()
@@ -12,8 +13,8 @@ object RandomCurrencyRateGenerator {
   def randomPair() = {
     val baseCurrency = randomCurrency()
     val counterCurrency = generateCounterCurrency(baseCurrency)
-    val rate = Random.nextDouble()
-    CurrencyRate(baseCurrency, counterCurrency, rate)
+    val percentUpdate = BigDecimal.valueOf(Random.nextDouble() * 5.0).setScale(3, RoundingMode.DOWN)
+    CurrencyRateUpdated(baseCurrency, counterCurrency, percentUpdate)
   }
 
   @tailrec

@@ -1,16 +1,16 @@
 package sample.reactivekafka
 
-case class CurrencyRate(base: String, counter: String, rate: BigDecimal) {
-  def asKeyValue = (base, counter) -> rate
+case class CurrencyRateUpdated(base: String, counter: String, percentUpdate: BigDecimal) {
+  def asKeyValue = (base, counter) -> percentUpdate
 }
 
-object CurrencyRateEncoder extends kafka.serializer.Encoder[CurrencyRate] {
-  override def toBytes(r: CurrencyRate): Array[Byte] = s"${r.base}/${r.counter}/${r.rate}".getBytes("UTF-8")
+object CurrencyRateUpdatedEncoder extends kafka.serializer.Encoder[CurrencyRateUpdated] {
+  override def toBytes(r: CurrencyRateUpdated): Array[Byte] = s"${r.base}/${r.counter}/${r.percentUpdate}".getBytes("UTF-8")
 }
 
-object CurrencyRateDecoder extends kafka.serializer.Decoder[CurrencyRate] {
-  override def fromBytes(bytes: Array[Byte]): CurrencyRate = {
-    val Array(base, counter, rateStr) = new String(bytes, "UTF-8").split('/')
-    CurrencyRate(base, counter, BigDecimal(rateStr))
+object CurrencyRateUpdatedDecoder extends kafka.serializer.Decoder[CurrencyRateUpdated] {
+  override def fromBytes(bytes: Array[Byte]): CurrencyRateUpdated = {
+    val Array(base, counter, updateStr) = new String(bytes, "UTF-8").split('/')
+    CurrencyRateUpdated(base, counter, BigDecimal(updateStr))
   }
 }

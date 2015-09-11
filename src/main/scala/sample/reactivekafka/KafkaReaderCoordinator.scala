@@ -14,13 +14,11 @@ import scala.math.BigDecimal.RoundingMode
 class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor with ActorLogging {
 
   implicit val materializer = mat
-  var consumerWithOffsetSink: PublisherWithCommitSink[CurrencyRate] = _
-
-  var rates: Map[(String, String), BigDecimal] = Map.empty
+  var consumerWithOffsetSink: PublisherWithCommitSink[CurrencyRateUpdated] = _
 
   override def preStart(): Unit = {
     super.preStart()
-    self ! "Init"
+    initReader()
   }
 
   val processingDecider: Supervision.Decider = {
@@ -28,7 +26,7 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
   }
 
   override def receive: Receive = {
-    case "Init" => initReader()
+    case _ =>
   }
 
   def initReader(): Unit = {
@@ -38,7 +36,7 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
       zooKeeperHost = "localhost:2181",
       topic = topicName,
       "group",
-      CurrencyRateDecoder
+      CurrencyRateUpdatedDecoder
     )
       .kafkaOffsetsStorage()
       .commitInterval(1200 milliseconds)
@@ -51,18 +49,14 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
     context.parent ! "Reader initialized"
   }
 
-  def processMessage(msg: MessageAndMetadata[Array[Byte], CurrencyRate]) = {
+  def processMessage(msg: MessageAndMetadata[Array[Byte], CurrencyRateUpdated]) = {
     val pairAndRate = msg.message()
-    val lastRateOpt = rates.get((pairAndRate.base, pairAndRate.counter))
-    lastRateOpt.foreach { lastRate =>
-      if (alertTriggered(lastRate, pairAndRate.rate))
-        log.info(s"Exchange rate for ${pairAndRate.base}/${pairAndRate.counter} changed by ${percentChange(lastRate, pairAndRate.rate)}%!")
-    }
-    rates = rates + pairAndRate.asKeyValue
+    if (alertTriggered(pairAndRate.percentUpdate))
+      log.info(s"Exchange rate for ${pairAndRate.base}/${pairAndRate.counter} changed by ${pairAndRate.percentUpdate}%!")
     msg
   }
 
-  def alertTriggered(lastRate: BigDecimal, rate: BigDecimal): Boolean = percentChange(lastRate, rate).abs > 60
+  def alertTriggered(update: BigDecimal): Boolean = update > 3
 
   def percentChange(lastRate: BigDecimal, rate: BigDecimal) = {
     ((rate - lastRate) * 100.0 / rate).setScale(3, RoundingMode.UP)

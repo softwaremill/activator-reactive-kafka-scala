@@ -42,15 +42,15 @@ class KafkaWriterCoordinator(mat: Materializer, topicName: String) extends Actor
     val actorProps = new ReactiveKafka().producerActorProps(ProducerProperties(
       brokerList = "localhost:9092",
       topic = topicName,
-      encoder = CurrencyRateEncoder
+      encoder = CurrencyRateUpdatedEncoder
     ))
     val actor = context.actorOf(actorProps)
     subscriberActor = Some(actor)
     val generatorActor = context.actorOf(Props(new CurrencyRatePublisher))
 
     // Start the stream
-    val publisher: Publisher[CurrencyRate] = ActorPublisher[CurrencyRate](generatorActor)
-    Source(publisher).runWith(Sink(ActorSubscriber[CurrencyRate](actor)))
+    val publisher: Publisher[CurrencyRateUpdated] = ActorPublisher[CurrencyRateUpdated](generatorActor)
+    Source(publisher).runWith(Sink(ActorSubscriber[CurrencyRateUpdated](actor)))
   }
 
 }

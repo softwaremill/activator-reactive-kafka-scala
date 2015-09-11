@@ -3,7 +3,7 @@ package sample.reactivekafka
 import akka.actor.ActorLogging
 import akka.stream.actor.{ ActorPublisher, ActorPublisherMessage }
 
-class CurrencyRatePublisher extends ActorPublisher[CurrencyRate] with ActorLogging {
+class CurrencyRatePublisher extends ActorPublisher[CurrencyRateUpdated] with ActorLogging {
 
   override def receive: Receive = {
     case ActorPublisherMessage.Request(_) => sendRates()
@@ -13,7 +13,7 @@ class CurrencyRatePublisher extends ActorPublisher[CurrencyRate] with ActorLoggi
 
   def sendRates(): Unit = {
     while (isActive && totalDemand > 0) {
-      onNext(RandomCurrencyRateGenerator.randomPair())
+      onNext(RandomCurrencyRateChangeGenerator.randomPair())
       Thread.sleep(300)
     }
   }
