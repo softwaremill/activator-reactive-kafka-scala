@@ -12,7 +12,8 @@ libraryDependencies ++= Seq(
   "org.slf4j" % "log4j-over-slf4j" % "1.7.12",
   "com.typesafe.akka" %% "akka-slf4j" % "2.3.12",
   "org.scalatest" %% "scalatest" % "2.2.4" % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.3.12" % "test"
+  "com.typesafe.akka" %% "akka-testkit" % "2.3.12" % "test",
+  "io.spray" % "spray-json_2.10" % "1.3.2"
 )
 
 scalariformSettings
