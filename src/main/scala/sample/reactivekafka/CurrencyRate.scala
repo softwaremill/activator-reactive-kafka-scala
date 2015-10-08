@@ -1,16 +1,25 @@
 package sample.reactivekafka
 
+import spray.json.DefaultJsonProtocol
+
 case class CurrencyRateUpdated(base: String, counter: String, percentUpdate: BigDecimal) {
   def asKeyValue = (base, counter) -> percentUpdate
 }
 
+object CurrencyRateProtocols extends DefaultJsonProtocol {
+  implicit val currencyRteFormat = jsonFormat3(CurrencyRateUpdated)
+}
+
+import CurrencyRateProtocols._
+
 object CurrencyRateUpdatedEncoder extends kafka.serializer.Encoder[CurrencyRateUpdated] {
-  override def toBytes(r: CurrencyRateUpdated): Array[Byte] = s"${r.base}/${r.counter}/${r.percentUpdate}".getBytes("UTF-8")
+  import spray.json._
+  override def toBytes(r: CurrencyRateUpdated): Array[Byte] = r.toJson.compactPrint.getBytes("UTF-8")
 }
 
 object CurrencyRateUpdatedDecoder extends kafka.serializer.Decoder[CurrencyRateUpdated] {
   override def fromBytes(bytes: Array[Byte]): CurrencyRateUpdated = {
-    val Array(base, counter, updateStr) = new String(bytes, "UTF-8").split('/')
-    CurrencyRateUpdated(base, counter, BigDecimal(updateStr))
+    import spray.json._
+    new String(bytes, "UTF-8").parseJson.convertTo[CurrencyRateUpdated]
   }
 }
