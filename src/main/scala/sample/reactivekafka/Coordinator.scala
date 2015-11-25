@@ -32,8 +32,8 @@ class Coordinator extends Actor with ActorLogging {
       context.system.scheduler.scheduleOnce(5 seconds, self, "Stop")
     case "Stop" =>
       log.debug("Stopping the coordinator")
-      currencyWriter.foreach(f = actor => actor ! "Stop")
-      currencyReader.foreach(f = actor => context.stop(actor))
+      currencyWriter.foreach(actor => actor ! "Stop")
+      currencyReader.foreach(actor => context.stop(actor))
       context.system.scheduler.scheduleOnce(5 seconds, self, "Shutdown")
     case "Shutdown" =>
       log.debug("Shutting down the app")
