@@ -4,14 +4,13 @@ import akka.actor.SupervisorStrategy.Resume
 import akka.actor._
 import akka.stream.Materializer
 import akka.stream.actor.ActorSubscriberMessage.OnComplete
-import akka.stream.actor.{ ActorPublisher, ActorSubscriber }
-import akka.stream.scaladsl.{ Sink, Source }
-import com.softwaremill.react.kafka.{ ProducerProperties, ReactiveKafka }
-import org.reactivestreams.Publisher
+import akka.stream.actor.{ActorPublisher, ActorSubscriber}
+import akka.stream.scaladsl.{Sink, Source}
+import com.softwaremill.react.kafka.{ProducerProperties, ReactiveKafka}
 
 /**
- * Responsible for starting the writing stream.
- */
+  * Responsible for starting the writing stream.
+  */
 class KafkaWriterCoordinator(mat: Materializer, topicName: String) extends Actor with ActorLogging {
 
   implicit lazy val materializer = mat
@@ -47,8 +46,8 @@ class KafkaWriterCoordinator(mat: Materializer, topicName: String) extends Actor
     val generatorActor = context.actorOf(Props(new CurrencyRatePublisher))
 
     // Start the stream
-    val publisher: Publisher[CurrencyRateUpdated] = ActorPublisher[CurrencyRateUpdated](generatorActor)
-    Source(publisher).runWith(Sink(ActorSubscriber[CurrencyRateUpdated](actor)))
+    Source(ActorPublisher(generatorActor))
+      .runWith(Sink(ActorSubscriber[CurrencyRateUpdated](actor)))
   }
 
 }
