@@ -1,6 +1,6 @@
 package sample.reactivekafka
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, Props}
 import akka.stream.Supervision.Resume
 import akka.stream._
 import akka.stream.scaladsl._
@@ -50,13 +50,6 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
       .map(processAlert)
       .filter(alert => alert != None)
       .map(alert => alert.get)
-
-
-    // commit offset so we don't process the kafka message again
-    currencyBroadcaster
-      .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
-      .to(consumerWithOffsetSink.offsetCommitSink)
-      .run()
 
     // stream to write alerts to kafka
     currencyBroadcaster
