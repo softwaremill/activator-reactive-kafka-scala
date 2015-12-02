@@ -61,23 +61,23 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
     // stream to write alerts to kafka
     currencyBroadcaster
       .via(alertsFlow)
-      .to(Sink.actorSubscriber(createKafkaAlertProducerProps(null)))
+      .to(Sink.actorSubscriber(createKafkaAlertProducerProps(None)))
       .run()
 
     // stream to write USD alerts to kafka
     currencyBroadcaster
       .via(alertsFlow)
       .filter(alert => alert.contains("USD"))
-      .to(Sink.actorSubscriber(createKafkaAlertProducerProps("USD")))
+      .to(Sink.actorSubscriber(createKafkaAlertProducerProps(Some("USD"))))
       .run()
 
     context.parent ! "Reader initialized"
   }
 
-  private def createKafkaAlertProducerProps(currency: String): Props = {
+  private def createKafkaAlertProducerProps(currency: Option[String]): Props = {
     new ReactiveKafka().producerActorProps(ProducerProperties(
       brokerList = "localhost:9092",
-      topic = s"${topicName}-alert-${currency}",
+      topic = Array(Some(topicName), Some("alert"), currency).flatten.mkString("-"),
       encoder = new StringEncoder()
     ))
   }

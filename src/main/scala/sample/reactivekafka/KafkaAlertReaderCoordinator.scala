@@ -10,7 +10,7 @@ import kafka.serializer.StringDecoder
 
 import scala.concurrent.duration._
 
-class KafkaAlertReaderCoordinator(mat: Materializer, topicName: String, currency: String) extends Actor with ActorLogging {
+class KafkaAlertReaderCoordinator(mat: Materializer, topicName: String, currency: Option[String]) extends Actor with ActorLogging {
   implicit val materializer = mat
   var consumerWithOffsetSink: PublisherWithCommitSink[String] = _
   val processingDecider: Supervision.Decider = {
@@ -37,7 +37,7 @@ class KafkaAlertReaderCoordinator(mat: Materializer, topicName: String, currency
     val consumerProperties = ConsumerProperties(
       brokerList = "localhost:9092",
       zooKeeperHost = "localhost:2181",
-      topic = s"${topicName}-alert-${currency}",
+      topic = getTopicName(currency),
       "group",
       new StringDecoder()
     )
@@ -65,8 +65,12 @@ class KafkaAlertReaderCoordinator(mat: Materializer, topicName: String, currency
 
   def outputMessage(msg: MessageAndMetadata[Array[Byte], String]) = {
     val alert = msg.message()
-    log.info(s"topic: ${topicName}-alert-${currency} - ${alert}")
+    log.info(s"topic: ${getTopicName(currency)} - ${alert}")
 
     msg
+  }
+
+  private def getTopicName(currency: Option[String]) = {
+    Array(Some(topicName), Some("alert"), currency).flatten.mkString("-")
   }
 }

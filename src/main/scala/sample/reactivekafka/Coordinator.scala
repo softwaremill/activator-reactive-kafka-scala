@@ -30,8 +30,8 @@ class Coordinator extends Actor with ActorLogging {
       log.debug("Starting the coordinator")
       currencyWriter = Some(context.actorOf(Props(new KafkaWriterCoordinator(materializer, topicName))))
       currencyReader = Some(context.actorOf(Props(new KafkaReaderCoordinator(materializer, topicName))))
-      alertReader = Some(context.actorOf(Props(new KafkaAlertReaderCoordinator(materializer, topicName, null))))
-      usdAlertReader = Some(context.actorOf(Props(new KafkaAlertReaderCoordinator(materializer, topicName, "USD"))))
+      alertReader = Some(context.actorOf(Props(new KafkaAlertReaderCoordinator(materializer, topicName, None))))
+      usdAlertReader = Some(context.actorOf(Props(new KafkaAlertReaderCoordinator(materializer, topicName, Some("USD")))))
     case "Reader initialized" =>
       context.system.scheduler.scheduleOnce(5 seconds, self, "Stop")
     case "Stop" =>
