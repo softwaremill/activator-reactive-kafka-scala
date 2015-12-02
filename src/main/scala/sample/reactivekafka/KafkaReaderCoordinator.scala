@@ -1,15 +1,15 @@
 package sample.reactivekafka
 
-import akka.actor.{ Actor, ActorLogging }
+import akka.actor.{Actor, ActorLogging, Props}
 import akka.stream.Supervision.Resume
-import akka.stream.{ Supervision, ActorAttributes, Materializer }
-import akka.stream.scaladsl.Source
-import com.softwaremill.react.kafka.{ ConsumerProperties, PublisherWithCommitSink, ReactiveKafka }
+import akka.stream._
+import akka.stream.scaladsl._
+import com.softwaremill.react.kafka.{ConsumerProperties, ProducerProperties, PublisherWithCommitSink, ReactiveKafka}
 import kafka.message.MessageAndMetadata
+import kafka.serializer.StringEncoder
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.math.BigDecimal.RoundingMode
 
 class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor with ActorLogging {
 
@@ -41,19 +41,46 @@ class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor
       .kafkaOffsetsStorage()
       .commitInterval(1200 milliseconds)
     )
+
     log.debug("Starting the reader")
-    Source(consumerWithOffsetSink.publisher)
-      .map(processMessage)
-      .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
-      .to(consumerWithOffsetSink.offsetCommitSink).run()
+    val currencyRateSource = Source(consumerWithOffsetSink.publisher)
+    val currencyBroadcaster = Source(currencyRateSource.runWith(Sink.publisher(true)))
+
+    val alertsFlow = Flow[MessageAndMetadata[Array[Byte], CurrencyRateUpdated]]
+      .map(processAlert)
+      .filter(alert => alert != None)
+      .map(alert => alert.get)
+
+    // stream to write alerts to kafka
+    currencyBroadcaster
+      .via(alertsFlow)
+      .to(Sink.actorSubscriber(createKafkaAlertProducerProps(None)))
+      .run()
+
+    // stream to write USD alerts to kafka
+    currencyBroadcaster
+      .via(alertsFlow)
+      .filter(alert => alert.contains("USD"))
+      .to(Sink.actorSubscriber(createKafkaAlertProducerProps(Some("USD"))))
+      .run()
+
     context.parent ! "Reader initialized"
   }
 
-  def processMessage(msg: MessageAndMetadata[Array[Byte], CurrencyRateUpdated]) = {
+  private def createKafkaAlertProducerProps(currency: Option[String]): Props = {
+    new ReactiveKafka().producerActorProps(ProducerProperties(
+      brokerList = "localhost:9092",
+      topic = Array(Some(topicName), Some("alert"), currency).flatten.mkString("-"),
+      encoder = new StringEncoder()
+    ))
+  }
+
+  def processAlert(msg: MessageAndMetadata[Array[Byte], CurrencyRateUpdated]): Option[String] = {
     val pairAndRate = msg.message()
     if (alertTriggered(pairAndRate.percentUpdate))
-      log.info(s"Exchange rate for ${pairAndRate.base}/${pairAndRate.counter} changed by ${pairAndRate.percentUpdate}%!")
-    msg
+      Some(s"${pairAndRate.base}/${pairAndRate.counter} changed by ${pairAndRate.percentUpdate}%!")
+    else
+      None
   }
 
   def alertTriggered(update: BigDecimal): Boolean = update.abs > 3

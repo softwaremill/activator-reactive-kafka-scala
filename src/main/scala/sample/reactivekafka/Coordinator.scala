@@ -1,20 +1,21 @@
 package sample.reactivekafka
 
-import java.util.{ Properties, UUID }
+import java.util.UUID
 
 import akka.actor._
 import akka.stream.ActorMaterializer
 import com.softwaremill.embeddedkafka.EmbeddedKafka
-import utils.embeddedkafka.KafkaLocal
 
-import scala.language.postfixOps
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class Coordinator extends Actor with ActorLogging {
 
   val topicName = UUID.randomUUID().toString
-  var writer: Option[ActorRef] = None
-  var reader: Option[ActorRef] = None
+  var currencyWriter: Option[ActorRef] = None
+  var currencyReader: Option[ActorRef] = None
+  var alertReader: Option[ActorRef] = None
+  var usdAlertReader: Option[ActorRef] = None
   val materializer = ActorMaterializer()(context)
 
   implicit val ec = context.dispatcher
@@ -27,14 +28,18 @@ class Coordinator extends Actor with ActorLogging {
   override def receive: Receive = {
     case "Start" =>
       log.debug("Starting the coordinator")
-      writer = Some(context.actorOf(Props(new KafkaWriterCoordinator(materializer, topicName))))
-      reader = Some(context.actorOf(Props(new KafkaReaderCoordinator(materializer, topicName))))
+      currencyWriter = Some(context.actorOf(Props(new KafkaWriterCoordinator(materializer, topicName))))
+      currencyReader = Some(context.actorOf(Props(new KafkaReaderCoordinator(materializer, topicName))))
+      alertReader = Some(context.actorOf(Props(new KafkaAlertReaderCoordinator(materializer, topicName, None))))
+      usdAlertReader = Some(context.actorOf(Props(new KafkaAlertReaderCoordinator(materializer, topicName, Some("USD")))))
     case "Reader initialized" =>
       context.system.scheduler.scheduleOnce(5 seconds, self, "Stop")
     case "Stop" =>
       log.debug("Stopping the coordinator")
-      writer.foreach(actor => actor ! "Stop")
-      reader.foreach(actor => context.stop(actor))
+      currencyWriter.map(actor => actor ! "Stop")
+      currencyReader.map(actor => context.stop(actor))
+      alertReader.map(actor => context.stop(actor))
+      usdAlertReader.map(actor => context.stop(actor))
       context.system.scheduler.scheduleOnce(5 seconds, self, "Shutdown")
     case "Shutdown" =>
       log.debug("Shutting down the app")
