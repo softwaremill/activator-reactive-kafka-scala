@@ -37,7 +37,9 @@
         a Kafka queue using a reactive <code>Publisher</code>. Elsewhere, a <code>Subscriber</code> reads
         from the queue in a reactive manner, producing a stream of messages that get processed and then committed after
         successful processing. The processing part checks whether exchange rate change passed some threshold (3%) and
-        in such case, emits an alert message.
+        in such case, emits an alert message. In a real-life scenario, this part could incorporate saving some additional
+        data to a DB, which justifies our need for at-least once delivery so that we are sure that there's will
+        be no message that gets missed.
 
     <p>A coordinator actor runs both processes as children and closes them after some time, shutting down whole
         system.</p>
@@ -48,8 +50,7 @@
     <h2>The coordinator</h2>
 
     <p>The <code>Coordinator</code> actor serves for orchestration of our application logic. It starts our writer
-        and
-        reader actors and schedules their shutdown together with graceful closing of embedded Kafka instance and the
+        and reader actors and schedules their shutdown together with graceful closing of embedded Kafka instance and the
         actor system.
     </p>
 
@@ -64,11 +65,8 @@
     </p>
 
     <p>
-        One important detail here is the error handling block. Since we want to capture all exceptions thrown by
-        our Kafka publisher, we initialize the subscriber actor as the child of <code>KafkaWriterCoordinator</code>.
-        That's why the publisher actor is created with <code>val actor = context.actorOf(actorProps)</code>. This
-        allows
-        us to define a custom <code>supervisorStrategy</code> which handles write failures.
+        One important detail here is error handling. Our writer uses Akka's <b>DeathWatch</b> to observe
+        the streams and recreate them in case of fatal failures, which result in termination of underlying actor.
     </p>
 
     <h2>The reader</h2>
@@ -83,32 +81,26 @@
         On actor initialization, we call <code>new ReactiveKafka().consumeWithOffsetSink(...)</code> in order
         to create an object of type <code>PublisherWithOffsetSink</code>. This type represents a pair: The
         <code>Publisher</code> that can be used as a <code>Source</code> (the queue that we read from) and an
-        offset sink, which we can put messages back to after we process them. We additionally add a guard
-        supervision strategy to handle any errors that may happen during message processing. The whole flow becomes:
+        offset sink, which we can put messages back to after we process them. The whole flow becomes:
 <pre><code>
-Source(consumerWithOffsetSink.publisher)
+Source.fromPublisher(consumerWithOffsetSink.publisher)
     .map(processMessage)
-    .withAttributes(supervisionStrategy(processingDecider))
     .to(consumerWithOffsetSink.offsetCommitSink).run()
 </code></pre>
     </p>
 
     <p>
         The <code>offsetCommitSink</code> does not perform immediate commit, but it buffers offset and performs a
-        periodic
-        flush. By default Zookeeper is used to keep committed offsets data, but we want to use new Kafka 0.8 feature
-        which allows us to store the offsets directly in Kafka. That's why we initialize our
+        periodic flush. Here's how we initialize our
         <code>ConsumerProperties</code>
-        as follows:
+        :
 <pre><code>
 ConsumerProperties(
-    brokerList = "localhost:9092",
-    zooKeeperHost = "localhost:2181",
+    bootstrapServers = "localhost:9092",
     topic = topicName,
     "group",
-    CurrencyRateUpdatedDecoder
+    CurrencyRateUpdatedDeserializer
     )
-    .kafkaOffsetsStorage()
     .commitInterval(1200 milliseconds)
 </code></pre>
         The <code>commitInterval()</code> function allows us to fine-tune the interval of commit flushes in the
@@ -118,8 +110,8 @@ ConsumerProperties(
     <p>
         The message processing logic is actually quite trivial - for the purpose of simplicity in the example it
         only
-        checks whether exchange currency rate update crossed a threshold of 3% and in such case - prints an alert to
-        logs (console output).
+        checks whether exchange currency rate update crossed a threshold of 3% and in such case - stores to "database" by
+        printing an alert to logs (console output).
     </p>
 </div>
 <div>
@@ -194,8 +186,8 @@ ConsumerProperties(
     <ul>
         <li><a href="https://github.com/softwaremill/reactive-kafka#reactive-streams-for-kafka"
                target="_blank">Reactive Kafka documentation</a></li>
-        <li><a href="http://doc.akka.io/api/akka-stream-and-http-experimental/1.0/#akka.stream.scaladsl.package"
-               target="_blank">Akka Streams 1.0 API documentation</a></li>
+        <li><a href="http://doc.akka.io/api/akka-stream-and-http-experimental/2.0/#akka.stream.scaladsl.package"
+               target="_blank">Akka Streams 2.0 API documentation</a></li>
         <li><a href="http://www.reactive-streams.org/" target="_blank">Reactive Streams</a></li>
     </ul>
 </div>

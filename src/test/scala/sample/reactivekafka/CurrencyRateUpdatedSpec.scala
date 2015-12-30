@@ -11,8 +11,8 @@ class CurrencyRateUpdatedSpec extends FlatSpec with Matchers {
     val initialRate = CurrencyRateUpdated("EUR", "USD", BigDecimal.valueOf(3))
 
     // when
-    val bytes = CurrencyRateUpdatedEncoder.toBytes(initialRate)
-    val resultRate = CurrencyRateUpdatedDecoder.fromBytes(bytes)
+    val bytes = CurrencyRateUpdatedSerializer.serialize("s", initialRate)
+    val resultRate = CurrencyRateUpdatedDeserializer.deserialize("s", bytes)
 
     // then
     resultRate should equal(initialRate)

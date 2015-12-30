@@ -1,59 +1,58 @@
 package sample.reactivekafka
 
-import akka.actor.{ Actor, ActorLogging }
-import akka.stream.Supervision.Resume
-import akka.stream.{ Supervision, ActorAttributes, Materializer }
+import akka.actor.{ Terminated, Actor, ActorLogging }
+import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import com.softwaremill.react.kafka.{ ConsumerProperties, PublisherWithCommitSink, ReactiveKafka }
-import kafka.message.MessageAndMetadata
+import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.math.BigDecimal.RoundingMode
 
 class KafkaReaderCoordinator(mat: Materializer, topicName: String) extends Actor with ActorLogging {
 
   implicit val materializer = mat
-  var consumerWithOffsetSink: PublisherWithCommitSink[CurrencyRateUpdated] = _
+  var consumerWithOffsetSink: PublisherWithCommitSink[Array[Byte], CurrencyRateUpdated] = _
 
   override def preStart(): Unit = {
     super.preStart()
     initReader()
   }
 
-  val processingDecider: Supervision.Decider = {
-    case e: Exception => log.error(e, "Error when processing exchange rates"); Resume
-  }
-
   override def receive: Receive = {
+    case Terminated(_) =>
+      log.error("The consumer has been terminated, restarting the whole stream")
+      initReader()
     case _ =>
   }
 
   def initReader(): Unit = {
     implicit val actorSystem = context.system
     consumerWithOffsetSink = new ReactiveKafka().consumeWithOffsetSink(ConsumerProperties(
-      brokerList = "localhost:9092",
-      zooKeeperHost = "localhost:2181",
+      bootstrapServers = "localhost:9092",
       topic = topicName,
       "group",
-      CurrencyRateUpdatedDecoder
+      CurrencyRateUpdatedDeserializer
     )
-      .kafkaOffsetsStorage()
-      .commitInterval(1200 milliseconds)
-    )
+      .commitInterval(1200 milliseconds))
     log.debug("Starting the reader")
-    Source(consumerWithOffsetSink.publisher)
+    context.watch(consumerWithOffsetSink.publisherActor)
+    Source.fromPublisher(consumerWithOffsetSink.publisher)
       .map(processMessage)
-      .withAttributes(ActorAttributes.supervisionStrategy(processingDecider))
       .to(consumerWithOffsetSink.offsetCommitSink).run()
     context.parent ! "Reader initialized"
   }
 
-  def processMessage(msg: MessageAndMetadata[Array[Byte], CurrencyRateUpdated]) = {
-    val pairAndRate = msg.message()
-    if (alertTriggered(pairAndRate.percentUpdate))
-      log.info(s"Exchange rate for ${pairAndRate.base}/${pairAndRate.counter} changed by ${pairAndRate.percentUpdate}%!")
+  def processMessage(msg: ConsumerRecord[Array[Byte], CurrencyRateUpdated]) = {
+    val pairAndRate = msg.value()
+    if (alertTriggered(pairAndRate.percentUpdate)) {
+      saveMessageToDb(pairAndRate)
+    }
     msg
+  }
+
+  def saveMessageToDb(pairAndRate: CurrencyRateUpdated): Unit = {
+    log.info(s"Exchange rate for ${pairAndRate.base}/${pairAndRate.counter} changed by ${pairAndRate.percentUpdate}%!")
   }
 
   def alertTriggered(update: BigDecimal): Boolean = update.abs > 3

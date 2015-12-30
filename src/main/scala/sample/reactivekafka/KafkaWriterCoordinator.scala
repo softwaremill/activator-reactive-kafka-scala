@@ -1,12 +1,12 @@
 package sample.reactivekafka
 
-import akka.actor.SupervisorStrategy.Resume
 import akka.actor._
 import akka.stream.Materializer
+import akka.stream.actor.ActorPublisherMessage.Cancel
 import akka.stream.actor.ActorSubscriberMessage.OnComplete
 import akka.stream.actor.{ ActorPublisher, ActorSubscriber }
 import akka.stream.scaladsl.{ Sink, Source }
-import com.softwaremill.react.kafka.{ ProducerProperties, ReactiveKafka }
+import com.softwaremill.react.kafka.{ ProducerMessage, ProducerProperties, ReactiveKafka }
 import org.reactivestreams.Publisher
 
 /**
@@ -16,14 +16,8 @@ class KafkaWriterCoordinator(mat: Materializer, topicName: String) extends Actor
 
   implicit lazy val materializer = mat
 
-  var subscriberActor: Option[ActorRef] = None
-
-  override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy() {
-    case e: Exception =>
-      // here you can handle your failing Kafka writes
-      log.error("Write failed!")
-      Resume
-  }
+  var subscriberActorOpt: Option[ActorRef] = None
+  var generatorActorOpt: Option[ActorRef] = None
 
   override def preStart(): Unit = {
     super.preStart()
@@ -33,22 +27,31 @@ class KafkaWriterCoordinator(mat: Materializer, topicName: String) extends Actor
   override def receive: Receive = {
     case "Stop" =>
       log.debug("Stopping the writer coordinator")
-      subscriberActor.foreach(actor => actor ! OnComplete)
+      subscriberActorOpt.foreach(actor => actor ! OnComplete)
+      generatorActorOpt.foreach(actor => actor ! Cancel)
+    case Terminated(_) =>
+      log.error("The producer has been terminated, restarting the whole stream")
+      generatorActorOpt.foreach(actor => actor ! Cancel)
+      initWriter()
+
   }
 
   def initWriter(): Unit = {
     val actorProps = new ReactiveKafka().producerActorProps(ProducerProperties(
-      brokerList = "localhost:9092",
+      bootstrapServers = "localhost:9092",
       topic = topicName,
-      encoder = CurrencyRateUpdatedEncoder
+      valueSerializer = CurrencyRateUpdatedSerializer
     ))
-    val actor = context.actorOf(actorProps)
-    subscriberActor = Some(actor)
+    val subscriberActor = context.actorOf(actorProps)
+    subscriberActorOpt = Some(subscriberActor)
     val generatorActor = context.actorOf(Props(new CurrencyRatePublisher))
+    generatorActorOpt = Some(context.actorOf(Props(new CurrencyRatePublisher)))
+    context.watch(subscriberActor)
 
     // Start the stream
     val publisher: Publisher[CurrencyRateUpdated] = ActorPublisher[CurrencyRateUpdated](generatorActor)
-    Source(publisher).runWith(Sink(ActorSubscriber[CurrencyRateUpdated](actor)))
+    Source.fromPublisher(publisher).map(msg => ProducerMessage(msg))
+      .runWith(Sink.fromSubscriber(ActorSubscriber[ProducerMessage[Array[Byte], CurrencyRateUpdated]](subscriberActor)))
   }
 
 }
