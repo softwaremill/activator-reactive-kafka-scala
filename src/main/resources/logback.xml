@@ -10,7 +10,7 @@
     <logger name="kafka.network.Processor" level="OFF" /> <!-- To silence expected IOExceptions on consumer shutdown -->
     <logger name="org.apache.zookeeper.jmx" level="ERROR"/>  <!-- To silence expected JMX errors on ZK shutdown -->
     <logger name="kafka.server.KafkaApis" level="OFF" /> <!-- To silence expected occasional AdminOperationException on startup -->
-    <logger name="kafka.producer.async.DefaultEventHandler" level="OFF" /> <!-- To silence expected occasional 'Failed to collate messages by topic' on startup -->
+    <logger name="org.apache.kafka.clients.NetworkClient" level="ERROR"/> <!-- Silencing warnings when writing to not yet initialized topic -->
     <logger name="org.I0Itec" level="WARN"/>
     <logger name="sample" level="DEBUG"/>
 
