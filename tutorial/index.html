@@ -1,6 +1,6 @@
 <html>
 <head>
-    <title>Demonstrating Reactive Kafka</title>
+    <title>Demonstrating akka-stream-kafka</title>
 </head>
 <body>
 
@@ -8,18 +8,18 @@
     <h2>Introduction</h2>
 
     <p>
-        This tutorial contains a sample app that demonstrates Reactive Kafka.
+        This tutorial contains a sample app that demonstrates akka-stream-kafka.
     </p>
 
     <p>
-        Reactive Kafka is a wrapper that allows interacting with Apache Kafka like with
+        akka-stream-kafka is a wrapper that allows interacting with Apache Kafka like with
         a <a href="http://www.reactive-streams.org/" target="_blank">Reactive Stream</a>,
         which is a standard for asynchronous stream processing with non-blocking backpressure.
     </p>
 
     <p>
-        Reactive Kafka allows reading from Kafka like from a reactive Source, or writing to its
-        representation as a Sink. The library offers a simple DSL for constructing reactive Publishers/Subscribers
+        akka-stream-kafka allows reading from Kafka like from a reactive Source, or writing to its
+        representation as a Sink. The library offers a simple DSL for constructing reactive Sinks/Streams/Flows
         with various configuration options for the underlying Kafka queue. It also supports
         manual commit to achieve at-least-once delivery.
 
@@ -33,6 +33,7 @@
     </p>
 
     <p>
+
         Our flow begins with a random generator which generates currency exchange rate updates and writes them to
         a Kafka queue using a reactive <code>Publisher</code>. Elsewhere, a <code>Subscriber</code> reads
         from the queue in a reactive manner, producing a stream of messages that get processed and then committed after

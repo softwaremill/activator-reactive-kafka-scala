@@ -1,4 +1,4 @@
-package sample.reactivekafka
+package reactivekafka
 
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer

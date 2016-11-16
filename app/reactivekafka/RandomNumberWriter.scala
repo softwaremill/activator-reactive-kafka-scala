@@ -1,15 +1,14 @@
-package sample.reactivekafka
+package reactivekafka
 
-import akka.actor.{ Actor, ActorLogging }
+import akka.actor.{ Actor, ActorLogging, Cancellable }
 import akka.kafka.ProducerSettings
 import akka.kafka.scaladsl.Producer
-import akka.stream.{ ActorMaterializer, Materializer }
-import akka.stream.scaladsl.Source
+import akka.stream.Materializer
+import akka.stream.scaladsl.{ Keep, Source }
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.{ ByteArraySerializer, StringSerializer }
-
-import scala.concurrent.duration._
-import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.{ Duration, _ }
 import scala.util.Random
 
 /**
@@ -31,15 +30,29 @@ class RandomNumberWriter(implicit mat: Materializer) extends Actor with ActorLog
         .withBootstrapServers("localhost:9092")
       log.info("Initializing writer")
       val kafkaSink = Producer.plainSink(producerSettings)
-      // todo err handling
-      tickSource
+
+      val (control, future) = tickSource
         .map(new ProducerRecord[Array[Byte], String](RandomNumbers.Topic, _))
-        .to(kafkaSink)
+        .toMat(kafkaSink)(Keep.both)
         .run()
+      future.onFailure {
+        case ex =>
+          log.error("Stream failed due to error, restarting", ex)
+          throw ex
+      }
+      context.become(running(control))
       log.info(s"Writer now running, writing random numbers to topic ${RandomNumbers.Topic}")
+  }
+
+  def running(control: Cancellable): Receive = {
+    case Stop =>
+      log.info("Stopping Kafka producer stream and actor")
+      control.cancel()
+      context.stop(self)
   }
 }
 
 object RandomNumberWriter {
   case object Run
+  case object Stop
 }
