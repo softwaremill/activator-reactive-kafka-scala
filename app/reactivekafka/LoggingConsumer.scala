@@ -26,7 +26,7 @@ class LoggingConsumer(implicit mat: Materializer) extends Actor with ActorLoggin
         .map(_.committableOffset)
         .groupedWithin(10, 15 seconds)
         .map(group => group.foldLeft(CommittableOffsetBatch.empty) { (batch, elem) => batch.updated(elem) })
-        .mapAsync(3)(_.commitScaladsl())
+        .mapAsync(1)(_.commitScaladsl())
         .toMat(Sink.ignore)(Keep.both)
         .run()
 
