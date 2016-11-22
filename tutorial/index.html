@@ -33,134 +33,93 @@
     </p>
 
     <p>
-
-        Our flow begins with a random generator which generates currency exchange rate updates and writes them to
-        a Kafka queue using a reactive <code>Publisher</code>. Elsewhere, a <code>Subscriber</code> reads
-        from the queue in a reactive manner, producing a stream of messages that get processed and then committed after
-        successful processing. The processing part checks whether exchange rate change passed some threshold (3%) and
-        in such case, emits an alert message. In a real-life scenario, this part could incorporate saving some additional
-        data to a DB, which justifies our need for at-least once delivery so that we are sure that there's will
-        be no message that gets missed.
-
-    <p>A coordinator actor runs both processes as children and closes them after some time, shutting down whole
-        system.</p>
+        Our flow begins with a random number generator which publishes numbers to
+        a Kafka queue using a reactive stream. At the same time, two consumer streams read from this topic and expose
+        read data in two different ways. The <code>LoggingConsumer</code> starts with application and writes all the
+        numbers to a log. The <code>HomeController</code> represents a Play web endpoint which initializes another
+        stream and emits read numbers via a WebSocket.
 
     <p>Let's now take a look at all the individual components and how they work together.</p>
 </div>
 <div>
-    <h2>The coordinator</h2>
+    <h2>DemoLifecycle</h2>
 
-    <p>The <code>Coordinator</code> actor serves for orchestration of our application logic. It starts our writer
-        and reader actors and schedules their shutdown together with graceful closing of embedded Kafka instance and the
-        actor system.
+    <p>Starts embedded Kafka service and actors: <code>RandomNumberWriter</code> + <code>LoggingConsumer</code>. Also
+        maintains a shutdown hook responsible for graceful shutdown.
     </p>
 
-    <h2>The writer</h2>
+    <h2>RandomNumberWriter</h2>
 
+    <p>An actor which creates and runs the producer stream. This stream uses Kafka as a sink and sends generated
+        numbers to it, using default ack settings. Materialized value of type `Control` is used for graceful
+        shutdown of the stream. In case of stream failure, the exception will handled by restarting
+        the actor which will re-initialize the stream.
+    </p>
+
+    <h2>LoggingConsumer</h2>
+
+    <p>This actor creates a consumer stream which reads data from our topic and writes the numbers to log (which
+        is configured as STDOUT). Our processing can be parallelized, which is demonstrated with <code>mapAsync(2)(processMessage)</code>.
+        We consider data as "processed" after it gets written to the log, then
+        all the messages flow further into a grouping stage (<code>groupWithin</code>). This stage finishes grouping
+        after it collects 10 messages or 15 seconds pass, whatever happens first. Such group gets then committed to Kafka.
+    </p>
     <p>
-        The stream that continuously puts elements in our queue is managed by the
-        <code>KafkaWriterCoordinator</code>
-        actor. On start, it initializes a stream where the <b>Source</b> is a Publisher with our random event
-        generator,
-        and the <b>Sink</b> is build with the Reactive Kafka API in order to connect a queue.
+        Error handling and shutdown control are managed in the same way as in case of `RandomNumberWriter`. When our
+        actor restarts, it will resume the stream which should start consuming from last committed offset. Since we commit
+        messages in batches after processing, our approach guarantees <b>at-least-once delivery</b> semantics.
     </p>
 
+    <h2>WebSocket</h2>
+
+    <p>There may be more than one consumer for a topic. Our <code>HomeController</code> allows connecting using, for example,
+        a web browser. Such request will open a websocket emitting numbers read by its own stream. This consumer stream
+        has a different <b>groupId</b> than our logging consumer.
+    </p>
     <p>
-        One important detail here is error handling. Our writer uses Akka's <b>DeathWatch</b> to observe
-        the streams and recreate them in case of fatal failures, which result in termination of underlying actor.
+        Error handling and shutdown are maintained by Play framework, so we can just create a `Source` and pass it further
+        to the framework.
     </p>
 
-    <h2>The reader</h2>
-
-    <p>
-        Another actor, the <code>KafkaReaderCoordinator</code> starts a second stream. This one encapsulates the
-        logic
-        of reading from the Kafka queue, processing messages and committing their offsets after they get processed.
-    </p>
-
-    <p>
-        On actor initialization, we call <code>new ReactiveKafka().consumeWithOffsetSink(...)</code> in order
-        to create an object of type <code>PublisherWithOffsetSink</code>. This type represents a pair: The
-        <code>Publisher</code> that can be used as a <code>Source</code> (the queue that we read from) and an
-        offset sink, which we can put messages back to after we process them. The whole flow becomes:
-<pre><code>
-Source.fromPublisher(consumerWithOffsetSink.publisher)
-    .map(processMessage)
-    .to(consumerWithOffsetSink.offsetCommitSink).run()
-</code></pre>
-    </p>
-
-    <p>
-        The <code>offsetCommitSink</code> does not perform immediate commit, but it buffers offset and performs a
-        periodic flush. Here's how we initialize our
-        <code>ConsumerProperties</code>
-        :
-<pre><code>
-ConsumerProperties(
-    bootstrapServers = "localhost:9092",
-    topic = topicName,
-    "group",
-    CurrencyRateUpdatedDeserializer
-    )
-    .commitInterval(1200 milliseconds)
-</code></pre>
-        The <code>commitInterval()</code> function allows us to fine-tune the interval of commit flushes in the
-        underlying commit sink.
-    </p>
-
-    <p>
-        The message processing logic is actually quite trivial - for the purpose of simplicity in the example it
-        only
-        checks whether exchange currency rate update crossed a threshold of 3% and in such case - stores to "database" by
-        printing an alert to logs (console output).
-    </p>
 </div>
 <div>
     <h2>Shutdown</h2>
 
     <p>
         It is important that we close the consumers and publishers before actor system goes down. The
-        <code>KafkaWriterCoordinator</code> ensures that its subscriber child receives an <code>OnComplete</code>
-        message
-        that should trigger closing of any underlying resources. The <code>KafkaReaderCoordinator</code> calls
-        <code>consumerWithOffsetSink.cancel()</code> which also does necessary cleaning.
+        <code>DemoLifecycle</code> uses Play shutdown hook which sends appropriate messages to writer/reader actors.
+        These actor will then use `Control` objects materialized by streams to close the flows and all underlying Kafka connections.
     </p>
 </div>
 <div>
     <h2>Running the application</h2>
 
     <p>
-        To start the app, you just need to execute <code>run</code> in the sbt console. The console output should look
+        To start the app, you just need to execute <code>run</code> in the sbt console. Next, open localhost:9000 in a
+        web browser. The console output should look
         similar to following:
 <pre><code>
-[info] Running sample.reactivekafka.Application
-[info] 11:03:01.680 INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
-[info] starting local zookeeper...
-[info] done
-[info] starting local kafka broker...
-[info] done
-[info] 11:03:03.621 DEBUG sample.reactivekafka.Coordinator - Starting the coordinator
-[info] 11:03:05.858 DEBUG s.r.KafkaReaderCoordinator - Starting the reader
-[info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.560%!
-[info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 4.211%!
-[info] 11:03:05.897 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/AUD changed by 3.458%!
-[info] 11:03:06.160 INFO s.r.KafkaReaderCoordinator - Exchange rate for JPY/CHF changed by 3.188%!
-[info] 11:03:06.461 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/JPY changed by 3.879%!
-[info] 11:03:07.062 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/CHF changed by 4.792%!
-[info] 11:03:07.671 INFO s.r.KafkaReaderCoordinator - Exchange rate for AUD/EUR changed by 4.967%!
-[info] 11:03:07.973 INFO s.r.KafkaReaderCoordinator - Exchange rate for EUR/CHF changed by 4.317%!
-[info] 11:03:08.578 INFO s.r.KafkaReaderCoordinator - Exchange rate for USD/EUR changed by 3.202%!
-[info] 11:03:09.185 INFO s.r.KafkaReaderCoordinator - Exchange rate for CHF/EUR changed by 4.125%!
-[info] 11:03:10.886 DEBUG sample.reactivekafka.Coordinator - Stopping the coordinator
-[info] 11:03:10.887 DEBUG s.r.KafkaWriterCoordinator - Stopping the writer coordinator
-[info] 11:03:15.905 DEBUG sample.reactivekafka.Coordinator - Shutting down the app
-[info] stopping kafka...
-[info] done
+09:52:54.941 INFO  akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+09:52:54.945 INFO  reactivekafka.DemoLifecycle - Starting embedded Kafka
+09:52:55.556 INFO  reactivekafka.DemoLifecycle - Embedded Kafka ready
+09:52:55.686 INFO  reactivekafka.RandomNumberWriter - Initializing writer
+09:52:55.746 INFO  reactivekafka.RandomNumberWriter - Writer now running, writing random numbers to topic RandomNumbers
+09:52:57.562 INFO  reactivekafka.LoggingConsumer - Initializing logging consumer
+09:52:57.589 INFO  reactivekafka.LoggingConsumer - Logging consumer started
+09:52:57.672 INFO  play.api.Play - Application started (Dev)
+09:52:58.761 INFO  reactivekafka.LoggingConsumer - Consumed number: -881358456
+09:52:58.762 INFO  reactivekafka.LoggingConsumer - Consumed number: -1211016723
+09:52:58.762 INFO  reactivekafka.LoggingConsumer - Consumed number: 82910467
+09:52:59.737 INFO  reactivekafka.LoggingConsumer - Consumed number: -1250504005
         </code></pre>
-        Here we can see all the alerts that got triggered in our reader as well as diagnostic messages about
-        starting/stopping
-        individual components.
+        Output in the browser should display same numbers. If you now push <code>ctrl+D</code> in the console, you
+    will see indications that the clean shutdown hooks are doing their job:
     </p>
+<pre><code>
+09:54:32.453 INFO  reactivekafka.DemoLifecycle - Shutting down application...
+09:54:32.454 INFO  reactivekafka.RandomNumberWriter - Stopping Kafka producer stream and actor
+09:54:32.455 INFO  reactivekafka.LoggingConsumer - Shutting down logging consumer stream and actor
+</code></pre>
 
     <p>
         You may notice that the <code>logback.xml</code> configuration file contains directives that silence some errors
@@ -168,27 +127,18 @@ ConsumerProperties(
         These messages are related to running Kafka/Zookeeper in embedded mode and do not really affect our application,
         so we don't want them to pollute our output in this example. You can always try to run the app on your local
         ZK/Kafka
-        instance and disable initialization of <code>EmbeddedKafka</code> in the <code>Coordinator</code> actor.
+        instance and disable usage of <code>EmbeddedKafka</code> in the <code>DemoLifecycle</code> actor.
     </p>
 </div>
 
-<div>
-    <h2>Performance tuning</h2>
 
-    <p>
-        Please note that the subscriber/publisher wrappers are in fact <b>blocking</b> due to the synchronous nature
-        of underlying Kafka client. In order to isolate any potential problems, on the production environment you
-        should consider using custom dispatchers for these actors. More on this in the
-        <a href="https://github.com/softwaremill/reactive-kafka#tuning" target="_blank">Reactive Kafka README</a>.
-    </p>
-</div>
 <div>
     <h2>Links</h2>
     <ul>
-        <li><a href="https://github.com/softwaremill/reactive-kafka#reactive-streams-for-kafka"
-               target="_blank">Reactive Kafka documentation</a></li>
-        <li><a href="http://doc.akka.io/api/akka-stream-and-http-experimental/2.0/#akka.stream.scaladsl.package"
-               target="_blank">Akka Streams 2.0 API documentation</a></li>
+        <li><a href="http://doc.akka.io/docs/akka-stream-kafka/current/home.html"
+               target="_blank">Library documentation</a></li>
+        <li><a href="http://doc.akka.io/docs/akka/current/scala/stream/index.html"
+               target="_blank">Akka Streams documentation</a></li>
         <li><a href="http://www.reactive-streams.org/" target="_blank">Reactive Streams</a></li>
     </ul>
 </div>
