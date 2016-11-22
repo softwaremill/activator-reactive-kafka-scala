@@ -16,6 +16,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   "net.manub" %% "scalatest-embedded-kafka" % "0.7.1"
+    exclude("log4j", "log4j")
 )
 
 enablePlugins(PlayScala)
