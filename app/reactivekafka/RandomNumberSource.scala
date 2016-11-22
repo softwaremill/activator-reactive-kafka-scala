@@ -8,7 +8,7 @@ import org.apache.kafka.common.serialization.{ ByteArrayDeserializer, StringDese
 
 object RandomNumberSource {
 
-  def create(groupId: String)(implicit system: ActorSystem) = {
+  def create(groupId: String)(implicit system: ActorSystem): Unit = {
     val consumerSettings = ConsumerSettings(system, new ByteArrayDeserializer, new StringDeserializer)
       .withBootstrapServers("localhost:9092")
       .withGroupId(groupId)
